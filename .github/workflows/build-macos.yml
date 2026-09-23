@@ -21,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.12"
           architecture: arm64
 
       - name: Install dependencies
@@ -35,6 +35,50 @@ jobs:
         run: |
           LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n 1)
 
+          if [ -z "$LAST_TAG" ]; then
+            VERSION=1
+          else
+            LAST_VERSION=${LAST_TAG#v}
+            VERSION=$((LAST_VERSION + 1))
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+          echo "Building version $VERSION"
+
+      - name: Build Apple Silicon app
+        run: |
+          python -m PyInstaller \
+            --noconfirm \
+            --clean \
+            --windowed \
+            --target-architecture arm64 \
+            --name HumanTypist \
+            human_typist.py
+
+      - name: Create ZIP
+        run: |
+          cd dist
+          zip -r \
+            "HumanTypist-macOS-arm64-v${{ steps.version.outputs.version }}.zip" \
+            HumanTypist.app
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create \
+            "${{ steps.version.outputs.tag }}" \
+            "dist/HumanTypist-macOS-arm64-v${{ steps.version.outputs.version }}.zip" \
+            --title "HumanTypist v${{ steps.version.outputs.version }}" \
+            --generate-notes
+
+      - name: Upload Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HumanTypist-macOS-arm64-v${{ steps.version.outputs.version }}
+          path: dist/HumanTypist-macOS-arm64-v${{ steps.version.outputs.version }}.zip
           if [ -z "$LAST_TAG" ]; then
             VERSION=1
           else
